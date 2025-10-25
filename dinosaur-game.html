@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dinosaur Jump Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(to bottom, #87CEEB 0%, #E0F6FF 100%);
+            font-family: 'Arial', sans-serif;
+        }
+
+        .game-container {
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        canvas {
+            border: 3px solid #333;
+            background: #f7f7f7;
+            display: block;
+            margin: 0 auto;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .score {
+            font-size: 24px;
+            margin-top: 20px;
+            color: #333;
+            font-weight: bold;
+        }
+
+        .instructions {
+            margin-top: 15px;
+            color: #555;
+            font-size: 16px;
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: none;
+        }
+
+        .game-over h2 {
+            color: #e74c3c;
+            margin-bottom: 15px;
+        }
+
+        .game-over p {
+            color: #333;
+            font-size: 18px;
+            margin: 10px 0;
+        }
+
+        .game-over button {
+            margin-top: 20px;
+            padding: 12px 30px;
+            font-size: 16px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .game-over button:hover {
+            background: #229954;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>Dinosaur Jump Game</h1>
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <div class="score">Score: <span id="score">0</span></div>
+        <div class="instructions">Press SPACE to jump | Avoid the cacti!</div>
+    </div>
+
+    <div class="game-over" id="gameOverScreen">
+        <h2>Game Over!</h2>
+        <p>Final Score: <span id="finalScore">0</span></p>
+        <button onclick="restartGame()">Play Again</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreElement = document.getElementById('finalScore');
+
+        // Game variables
+        let gameRunning = false;
+        let gameSpeed = 5;
+        let score = 0;
+        let jumpPower = 0;
+        let gravity = 0.6;
+        let isJumping = false;
+
+        // Dinosaur
+        const dino = {
+            x: 50,
+            y: 300,
+            width: 40,
+            height: 50,
+            velocityY: 0,
+            jumping: false
+        };
+
+        // Obstacles array
+        let obstacles = [];
+        let obstacleTimer = 0;
+        let obstacleInterval = 100;
+
+        // Ground
+        const ground = {
+            y: 350,
+            height: 50
+        };
+
+        // Draw dinosaur
+        function drawDino() {
+            ctx.fillStyle = '#27ae60';
+            ctx.fillRect(dino.x, dino.y, dino.width, dino.height);
+
+            // Eye
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(dino.x + 25, dino.y + 10, 8, 8);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(dino.x + 28, dino.y + 13, 3, 3);
+
+            // Legs
+            ctx.fillStyle = '#27ae60';
+            ctx.fillRect(dino.x + 5, dino.y + dino.height, 8, 10);
+            ctx.fillRect(dino.x + 27, dino.y + dino.height, 8, 10);
+        }
+
+        // Draw ground
+        function drawGround() {
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(0, ground.y, canvas.width, ground.height);
+
+            // Ground details
+            ctx.strokeStyle = '#654321';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < canvas.width; i += 30) {
+                ctx.beginPath();
+                ctx.moveTo(i, ground.y);
+                ctx.lineTo(i + 15, ground.y + 10);
+                ctx.stroke();
+            }
+        }
+
+        // Draw obstacle (cactus)
+        function drawObstacle(obstacle) {
+            ctx.fillStyle = '#2ecc71';
+            // Main body
+            ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            // Arms
+            ctx.fillRect(obstacle.x - 8, obstacle.y + 15, 8, 15);
+            ctx.fillRect(obstacle.x + obstacle.width, obstacle.y + 20, 8, 15);
+        }
+
+        // Create obstacle
+        function createObstacle() {
+            const height = 40 + Math.random() * 20;
+            obstacles.push({
+                x: canvas.width,
+                y: ground.y - height,
+                width: 20,
+                height: height
+            });
+        }
+
+        // Jump function
+        function jump() {
+            if (!dino.jumping && gameRunning) {
+                dino.jumping = true;
+                dino.velocityY = -12;
+            }
+        }
+
+        // Check collision
+        function checkCollision(obstacle) {
+            return dino.x < obstacle.x + obstacle.width &&
+                   dino.x + dino.width > obstacle.x &&
+                   dino.y < obstacle.y + obstacle.height &&
+                   dino.y + dino.height > obstacle.y;
+        }
+
+        // Update game
+        function update() {
+            if (!gameRunning) return;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw ground
+            drawGround();
+
+            // Update dinosaur
+            dino.velocityY += gravity;
+            dino.y += dino.velocityY;
+
+            // Ground collision
+            if (dino.y + dino.height >= ground.y) {
+                dino.y = ground.y - dino.height;
+                dino.velocityY = 0;
+                dino.jumping = false;
+            }
+
+            // Draw dinosaur
+            drawDino();
+
+            // Update and draw obstacles
+            obstacleTimer++;
+            if (obstacleTimer > obstacleInterval) {
+                createObstacle();
+                obstacleTimer = 0;
+                obstacleInterval = 80 + Math.random() * 60;
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].x -= gameSpeed;
+
+                drawObstacle(obstacles[i]);
+
+                // Check collision
+                if (checkCollision(obstacles[i])) {
+                    gameOver();
+                    return;
+                }
+
+                // Remove off-screen obstacles and increase score
+                if (obstacles[i].x + obstacles[i].width < 0) {
+                    obstacles.splice(i, 1);
+                    score++;
+                    scoreElement.textContent = score;
+
+                    // Increase difficulty
+                    if (score % 5 === 0) {
+                        gameSpeed += 0.5;
+                    }
+                }
+            }
+
+            requestAnimationFrame(update);
+        }
+
+        // Game over
+        function gameOver() {
+            gameRunning = false;
+            finalScoreElement.textContent = score;
+            gameOverScreen.style.display = 'block';
+        }
+
+        // Restart game
+        function restartGame() {
+            gameRunning = true;
+            gameSpeed = 5;
+            score = 0;
+            obstacles = [];
+            obstacleTimer = 0;
+            dino.y = ground.y - dino.height;
+            dino.velocityY = 0;
+            dino.jumping = false;
+            scoreElement.textContent = score;
+            gameOverScreen.style.display = 'none';
+            update();
+        }
+
+        // Start game
+        function startGame() {
+            if (!gameRunning) {
+                restartGame();
+            }
+        }
+
+        // Event listeners
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (!gameRunning) {
+                    startGame();
+                } else {
+                    jump();
+                }
+            }
+        });
+
+        // Touch support for mobile
+        canvas.addEventListener('click', () => {
+            if (!gameRunning) {
+                startGame();
+            } else {
+                jump();
+            }
+        });
+
+        // Initial draw
+        drawGround();
+        drawDino();
+    </script>
+</body>
+</html>
